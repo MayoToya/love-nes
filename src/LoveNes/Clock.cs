@@ -1,29 +1,24 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
+using System.Linq;
+using System.Reactive.Linq;
 using System.Text;
-using System.Threading;
 
 namespace LoveNes
 {
-    /// <summary>
-    /// 时钟
-    /// </summary>
-    public class Clock
+    public class Clock : IDisposable
     {
         private readonly List<IClockSink> _clockSinks;
         private readonly List<IClockSink> _clock3Sinks;
 
-        private readonly Stopwatch _stopwatch;
-        private long _actualAge;
-        private readonly uint _frequency;
+        private readonly IObservable<long> _masterClockObservable;
+        private IDisposable _ticker;
 
-        public Clock(uint frequency)
+        public Clock(long masterClock = 21477272)
         {
             _clockSinks = new List<IClockSink>();
             _clock3Sinks = new List<IClockSink>();
-            _frequency = frequency;
-            _stopwatch = new Stopwatch();
+            _masterClockObservable = Observable.Timer(TimeSpan.Zero, TimeSpan.FromTicks(10000000 / masterClock));
         }
 
         /// <summary>
@@ -49,32 +44,32 @@ namespace LoveNes
         /// </summary>
         public void PowerUp()
         {
+            short counter = 0;
             _clockSinks.ForEach(o => o.OnPowerUp());
             _clock3Sinks.ForEach(o => o.OnPowerUp());
 
-            _actualAge = 0;
-            _stopwatch.Restart();
-
-            while (true)
-            {
-                var expectedAge = _stopwatch.ElapsedMilliseconds * _frequency / 1000;
-                var updateTimes = expectedAge - _actualAge;
-                if (updateTimes <= 0)
-                {
-                    Thread.Sleep(1);
-                }
-
-                while (updateTimes > 0)
-                {
-                    _clockSinks.ForEach(o => o.OnTick());
-
-                    for (int i = 0; i < 3; i++)
-                        _clock3Sinks.ForEach(o => o.OnTick());
-
-                    _actualAge++;
-                    updateTimes--;
-                }
-            }
+            _ticker = _masterClockObservable.Subscribe(_ =>
+              {
+                  switch (counter)
+                  {
+                      case 0:
+                          _clockSinks.AsParallel().ForEach(o => o.OnTick());
+                          _clock3Sinks.AsParallel().ForEach(o => o.OnTick());
+                          counter++;
+                          break;
+                      case 4:
+                      case 8:
+                          _clock3Sinks.AsParallel().ForEach(o => o.OnTick());
+                          counter++;
+                          break;
+                      case 11:
+                          counter = 0;
+                          break;
+                      default:
+                          counter++;
+                          break;
+                  }
+              });
         }
 
         /// <summary>
@@ -84,6 +79,11 @@ namespace LoveNes
         {
             _clockSinks.ForEach(o => o.OnReset());
             _clock3Sinks.ForEach(o => o.OnReset());
+        }
+
+        public void Dispose()
+        {
+            _ticker?.Dispose();
         }
     }
 

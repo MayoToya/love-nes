@@ -8,7 +8,7 @@ namespace LoveNes
     /// <summary>
     /// NES 系统
     /// </summary>
-    public class NesSystem
+    public class NesSystem : IDisposable
     {
         /// <summary>
         /// 片上 RAM 大小 (2KB)
@@ -30,7 +30,7 @@ namespace LoveNes
 
         public NesSystem(IHostGraphics hostGraphics)
         {
-            _clock = new Clock(1789773);
+            _clock = new Clock();
             _cpuBus = new Bus();
 
             // CPU
@@ -115,6 +115,11 @@ namespace LoveNes
         public void Reset()
         {
             _clock.Reset();
+        }
+
+        public void Dispose()
+        {
+            _clock?.Dispose();
         }
     }
 }
